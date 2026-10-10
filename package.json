@@ -1,8 +1,8 @@
 {
   "name": "dsh-deepseek-peak-pricing",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "DSH plugin: an always-visible DeepSeek API peak/off-peak (峰/谷) pricing status pill with a live countdown, plus a deepseek_pricing_status tool that tells the model which price a request bills at",
+  "description": "DSH plugin: an always-visible DeepSeek API peak/off-peak (峰/谷) pricing status pill with a live countdown and schedule, a switch notice, a deepseek_pricing_status tool, and a /pricing command",
   "type": "module",
   "license": "MIT",
   "main": "lib/index.js",
@@ -33,7 +33,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "node --test tests/pricing.test.mjs tests/client.test.mjs"
+    "test": "node --test tests/pricing.test.mjs tests/client.test.mjs tests/host.test.mjs"
   },
   "dependencies": {
     "@deepseek-ai/dsh-tools": "0.2.0-rc.2",

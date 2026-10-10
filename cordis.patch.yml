@@ -41,3 +41,10 @@
         # peakWindows:
         #   - { startMinute: 540, endMinute: 720 }
         #   - { startMinute: 840, endMinute: 1080 }
+        #
+        # 浏览器半（状态条、面板、切换提醒）读的也是这几个字段：它们在 Config
+        # schema 里声明为 .volatile()，由 dsh-settings 的配置投影同步过去。
+        #
+        # 提醒行为（仅浏览器半）：
+        # notifyOnSwitch: true           # 时段切换时弹一条 12 秒后自动消失的提醒
+        # remindBeforePeakMinutes: 5     # 进入高峰前多少分钟预告；0 表示不预告

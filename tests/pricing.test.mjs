@@ -9,7 +9,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  DEFAULT_RULES, MODELS, classifyDay, formatCountdown, nextSwitch, periodAt, ratesFor, validateRules,
+  DEFAULT_RULES, HOLIDAYS_2026, MODELS, beijingDate, classifyDay, dayLoad, estimateCost,
+  formatBeijingClock, formatBeijingTime, formatCountdown, formatSpan, live, nextSwitch,
+  parseBeijingMoment, periodAt, ratesFor, read, resolveRules, schedule, validateRules,
 } from '../lib/shared/pricing.js'
 
 /** Build the instant of one Beijing wall-clock moment. */
@@ -191,15 +193,38 @@ test('countdown formatting stays readable at every scale', () => {
   assert.equal(formatCountdown(-1), '00:00')
 })
 
+test('span formatting names the unit a stretch is read in', () => {
+  assert.equal(formatSpan(45 * 60_000), '45 分钟')
+  assert.equal(formatSpan(3 * 3_600_000), '3 小时')
+  assert.equal(formatSpan(30_000), '不到 1 分钟')
+  assert.equal(formatSpan(2 * 86_400_000 + 3 * 3_600_000), '2 天 3 小时')
+  assert.equal(formatSpan(86_400_000 + 2 * 3_600_000 + 30 * 60_000), '1 天 2 小时 30 分钟')
+})
+
+test('the Beijing clock is rendered from the instant, never from local time', () => {
+  assert.equal(formatBeijingTime(new Date('2026-03-02T01:05:07Z')), '2026-03-02 09:05:07')
+  assert.equal(formatBeijingClock(new Date('2026-03-02T01:05:07Z')), '03-02 09:05:07')
+  assert.equal(beijingDate(new Date('2026-03-02T17:00:00Z')), '2026-03-03')
+})
+
 test('the built-in rule set validates clean, and typos are reported', () => {
   assert.deepEqual(validateRules(DEFAULT_RULES), [])
   assert.deepEqual(
     validateRules({ ...DEFAULT_RULES, holidays: [{ start: '2026-5-1', end: '2026-05-05', name: 'x' }] }),
-    ['holiday x: start/end must be YYYY-MM-DD'],
+    ['holiday x: start/end must be a real YYYY-MM-DD date'],
   )
   assert.deepEqual(
     validateRules({ ...DEFAULT_RULES, makeupWorkdays: ['2026/10/10'] }),
-    ['makeupWorkday 2026/10/10 must be YYYY-MM-DD'],
+    ['makeupWorkday 2026/10/10 must be a real YYYY-MM-DD date'],
+  )
+  // A day that does not exist must not silently roll over into March.
+  assert.deepEqual(
+    validateRules({ ...DEFAULT_RULES, holidays: [{ start: '2026-02-30', end: '2026-02-30', name: '假' }] }),
+    ['holiday 假: start/end must be a real YYYY-MM-DD date'],
+  )
+  assert.deepEqual(
+    validateRules({ ...DEFAULT_RULES, peakWindows: [{ startMinute: 720, endMinute: 720 }] }),
+    ['peakWindow 720-720 is not a valid half-open minute range'],
   )
 })
 
@@ -210,4 +235,114 @@ test('a custom rule set overrides the built-in calendar', () => {
     makeupWorkdays: [],
   }
   assert.equal(periodAt(rules, bj('2026-03-02T10:00:00')), 'off-peak')
+})
+
+// ---------------------------------------------------------------------------
+// Configuration resolution — the seam the Host and browser halves share
+// ---------------------------------------------------------------------------
+
+/** Build a live (volatile) reference the way schemastery parses a `.volatile()` field. */
+const liveRef = (value) => Object.freeze({ [Symbol.for('cosmokit.volatile.write')]: () => {}, get: () => value })
+
+test('resolveRules reads live references, so a config edit reaches running code', () => {
+  const ref = liveRef([{ start: '2026-03-02', end: '2026-03-02', name: '自定义' }])
+  assert.deepEqual(live(ref), [{ start: '2026-03-02', end: '2026-03-02', name: '自定义' }])
+  const { rules, problems } = resolveRules({ holidays: ref })
+  assert.deepEqual(problems, [])
+  assert.equal(periodAt(rules, bj('2026-03-02T10:00:00')), 'off-peak')
+  // An unconfigured field keeps the published calendar.
+  assert.equal(rules.makeupWorkdays, DEFAULT_RULES.makeupWorkdays)
+})
+
+test('an unusable rule set falls back to the published calendar and says why', () => {
+  const { rules, problems } = resolveRules({ holidays: [{ start: '2026-5-1', end: '2026-05-05', name: 'x' }] })
+  assert.deepEqual(problems, ['holiday x: start/end must be a real YYYY-MM-DD date'])
+  assert.equal(rules, DEFAULT_RULES)
+  assert.equal(periodAt(rules, bj('2026-05-01T10:00:00')), 'off-peak')
+})
+
+test('resolveRules with nothing configured resolves the built-ins cleanly', () => {
+  const { rules, problems } = resolveRules(undefined)
+  assert.deepEqual(problems, [])
+  assert.equal(rules.holidays, HOLIDAYS_2026)
+})
+
+// ---------------------------------------------------------------------------
+// Timeline, day load, cost
+// ---------------------------------------------------------------------------
+
+test('the schedule walks the current stretch and the ones that follow it', () => {
+  // From Monday 10:00: peak until 12:00, off-peak until 14:00, peak until 18:00.
+  const entries = schedule(DEFAULT_RULES, bj('2026-03-02T10:00:00'), 3)
+  assert.equal(entries.length, 3)
+  assert.equal(entries[0].period, 'peak')
+  assert.equal(entries[0].reason, '现在')
+  assert.equal(entries[0].milliseconds, 2 * 3_600_000)
+  assert.equal(entries[1].period, 'off-peak')
+  assert.equal(entries[1].reason, '午间谷时开始')
+  assert.equal(entries[1].until.toISOString(), bj('2026-03-02T14:00:00').toISOString())
+  assert.equal(formatSpan(entries[1].milliseconds), '2 小时')
+  assert.equal(entries[2].period, 'peak')
+  assert.equal(entries[2].until.toISOString(), bj('2026-03-02T18:00:00').toISOString())
+})
+
+test('the schedule is contiguous: each stretch ends where the next begins', () => {
+  const entries = schedule(DEFAULT_RULES, bj('2026-03-02T10:00:00'), 20)
+  assert.equal(entries.length, 20)
+  for (let index = 1; index < entries.length; index++) {
+    assert.equal(entries[index - 1].until.getTime(), entries[index].at.getTime())
+    assert.notEqual(entries[index].period, entries[index - 1].period)
+  }
+  // A real calendar always has a next boundary, so the walk never invents a stop.
+  assert.ok(entries[entries.length - 1].until !== null)
+})
+
+test('a workday divides 7 hours peak to 17 hours off-peak, a rest day 0 to 24', () => {
+  // 09:00-12:00 is 3 hours and 14:00-18:00 is 4.
+  assert.deepEqual(dayLoad(DEFAULT_RULES, '2026-03-02'), { peakMinutes: 420, offPeakMinutes: 1020 })
+  assert.deepEqual(dayLoad(DEFAULT_RULES, '2026-03-07'), { peakMinutes: 0, offPeakMinutes: 1440 })
+  assert.deepEqual(dayLoad(DEFAULT_RULES, '2026-05-01'), { peakMinutes: 0, offPeakMinutes: 1440 })
+  // Overlapping windows must not be counted twice.
+  const overlapping = { ...DEFAULT_RULES, peakWindows: [{ startMinute: 540, endMinute: 720 }, { startMinute: 600, endMinute: 780 }] }
+  assert.deepEqual(dayLoad(overlapping, '2026-03-02'), { peakMinutes: 240, offPeakMinutes: 1200 })
+})
+
+test('a reading folds the period, the day shape, and the countdown', () => {
+  const reading = read(DEFAULT_RULES, bj('2026-03-02T10:00:00'))
+  assert.equal(reading.period, 'peak')
+  assert.equal(reading.kind, 'workday')
+  assert.equal(reading.holiday, null)
+  assert.equal(reading.makeupWorkday, false)
+  assert.equal(reading.remaining, 2 * 3_600_000)
+  assert.deepEqual(reading.load, { peakMinutes: 420, offPeakMinutes: 1020 })
+  const holiday = read(DEFAULT_RULES, bj('2026-05-01T10:00:00'))
+  assert.equal(holiday.kind, 'holiday')
+  assert.equal(holiday.holiday, '劳动节')
+})
+
+test('a cost estimate prices the mix and halves it at the other period', () => {
+  const tokens = { cacheHit: 1_000_000, cacheMiss: 1_000_000, output: 1_000_000 }
+  const peak = estimateCost(DEFAULT_RULES, 'deepseek-flash', tokens, 'peak')
+  const offPeak = estimateCost(DEFAULT_RULES, 'deepseek-flash', tokens, 'off-peak')
+  assert.ok(peak && offPeak)
+  assert.equal(peak.cost, 10.04)
+  assert.equal(offPeak.cost, 5.02)
+  assert.equal(peak.rates.cacheHit, 0.04)
+  assert.equal(estimateCost(DEFAULT_RULES, 'nope', tokens, 'peak'), null)
+  // Junk counts read as zero rather than producing NaN.
+  assert.equal(estimateCost(DEFAULT_RULES, 'deepseek-flash', { output: -5 }, 'peak')?.cost, 0)
+  assert.equal(estimateCost(DEFAULT_RULES, 'deepseek-flash', {}, 'peak')?.cost, 0)
+})
+
+test('a caller-supplied instant parses in Beijing terms', () => {
+  const now = bj('2026-03-02T10:00:00')
+  assert.equal(parseBeijingMoment('2026-10-12 10:00', now)?.toISOString(), bj('2026-10-12T10:00:00').toISOString())
+  assert.equal(parseBeijingMoment('2026-10-12T10:00:30', now)?.toISOString(), bj('2026-10-12T10:00:30').toISOString())
+  assert.equal(parseBeijingMoment('2026-10-12', now)?.toISOString(), bj('2026-10-12T00:00:00').toISOString())
+  assert.equal(parseBeijingMoment('14:30', now)?.toISOString(), bj('2026-03-02T14:30:00').toISOString())
+  assert.equal(parseBeijingMoment('2026-10-12T02:00:00Z', now)?.toISOString(), '2026-10-12T02:00:00.000Z')
+  assert.equal(parseBeijingMoment('2026-02-30', now), null)
+  assert.equal(parseBeijingMoment('25:00', now), null)
+  assert.equal(parseBeijingMoment('随便写的', now), null)
+  assert.equal(parseBeijingMoment('   ', now), null)
 })
