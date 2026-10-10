@@ -1,0 +1,50 @@
+{
+  "name": "dsh-deepseek-peak-pricing",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DSH plugin: an always-visible DeepSeek API peak/off-peak (峰/谷) pricing status pill with a live countdown, plus a deepseek_pricing_status tool that tells the model which price a request bills at",
+  "type": "module",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./pricing": "./lib/shared/pricing.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "lib/shared/pricing.js"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "react",
+        "react/jsx-runtime",
+        "@deepseek-ai/cordis",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/pricing.test.mjs tests/client.test.mjs"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.4"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

@@ -1,0 +1,43 @@
+# dsh-deepseek-peak-pricing bundle patch.
+#
+# A bundle patch is applied over an EMPTY entry list to compose a profile tree,
+# so a bundle declares its own rows with `insert` — an id-targeted override
+# (`- id: ...`) can only address a row some earlier layer already created.
+#
+# One Host row. The browser half is not a row: `dsh.client` in package.json makes
+# the Web boot scan discover `exports["./client"]` and fetch it as a module-table
+# row, so this row's activation is what puts the status pill on screen.
+#
+# The `config:` block below is the row's default. The profile's own
+# cordis.patch.yml addresses `id: deepseek-peak-pricing` to override it — and
+# because a patch replaces a row's whole config rather than merging into it,
+# restate every key you still want.
+- insert:
+    - id: deepseek-peak-pricing
+      name: dsh-deepseek-peak-pricing
+      config:
+        # Optional rule overrides. Each list REPLACES the built-in one, so pass
+        # the complete set you want in force. Uncomment and complete to move the
+        # calendar once a new year's arrangement is published.
+        #
+        # holidays:
+        #   - { start: "2026-01-01", end: "2026-01-03", name: "元旦" }
+        #   - { start: "2026-02-15", end: "2026-02-23", name: "春节" }
+        #   - { start: "2026-04-04", end: "2026-04-06", name: "清明节" }
+        #   - { start: "2026-05-01", end: "2026-05-05", name: "劳动节" }
+        #   - { start: "2026-06-19", end: "2026-06-21", name: "端午节" }
+        #   - { start: "2026-09-25", end: "2026-09-27", name: "中秋节" }
+        #   - { start: "2026-10-01", end: "2026-10-07", name: "国庆节" }
+        #
+        # makeupWorkdays: 调休上班日。仅用于说明，不影响计价 —— DeepSeek 对
+        # 调休上班的周末仍按空闲时段全天计费，所以这份名单不参与定价。
+        #   - "2026-01-04"
+        #   - "2026-02-14"
+        #   - "2026-02-28"
+        #   - "2026-05-09"
+        #   - "2026-09-20"
+        #   - "2026-10-10"
+        #
+        # peakWindows:
+        #   - { startMinute: 540, endMinute: 720 }
+        #   - { startMinute: 840, endMinute: 1080 }

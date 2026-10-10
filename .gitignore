@@ -1,0 +1,14 @@
+# Dependencies — restored by `pnpm install`; never committed.
+node_modules/
+
+# Build output is committed on purpose: `lib/` is the prebuilt artifact that lets
+# `dsh plugin add github:<owner>/<repo>` work without running esbuild. pnpm >= 10
+# blocks third-party build scripts by default, so a source-only repo would force
+# every user through an `allowBuilds` approval first. Regenerate with
+# `node scripts/build.mjs` and commit the result together with the source.
+
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
