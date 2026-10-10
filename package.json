@@ -14,8 +14,12 @@
   },
   "files": [
     "lib/index.js",
+    "lib/index.js.map",
     "lib/client.js",
-    "lib/shared/pricing.js"
+    "lib/client.js.map",
+    "lib/shared/pricing.js",
+    "lib/shared/pricing.js.map",
+    "cordis.patch.yml"
   ],
   "dsh": {
     "bundle": {

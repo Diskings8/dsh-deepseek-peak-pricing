@@ -147,6 +147,20 @@ dsh plugin --profile desktop add github:<owner>/dsh-deepseek-peak-pricing
 dsh plugin --profile desktop add /path/to/dsh-deepseek-peak-pricing
 ```
 
+### `files` 白名单是安装契约的一部分
+
+从 GitHub（或任何 tarball）安装时，pnpm 只复制 `package.json` 的 `files` 里列出的文件，所以**没列进去的东西在用户机器上根本不存在**。漏掉 `cordis.patch.yml` 的表现是安装被拒绝并整份回滚：
+
+```
+dsh: installation rejected: Cannot validate installed package dsh-deepseek-peak-pricing:
+Error: dsh: failed to read overlay …\node_modules\dsh-deepseek-peak-pricing\cordis.patch.yml: ENOENT
+dsh: restored package.json, pnpm-lock.yaml, and node_modules.
+```
+
+`lib/*.js.map` 同理（构建契约要求产物带 sourcemap）。改完 `files` 后，用 `npm pack --dry-run --json` 列一遍 —— 列出来的就是装到用户机器上的全部内容，`cordis.patch.yml` 必须在其中。
+
+注意 pnpm 的 git 依赖打的是**提交后的树**：本地改了 `files` 但没 commit，`dsh plugin add github:…` 拿到的仍是旧清单。
+
 ### 自己改代码时
 
 ```bash
